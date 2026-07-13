@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>SIGNAL // Hand-Tracked Dodge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="scanframe" aria-hidden="true">
+    <span class="corner tl"></span>
+    <span class="corner tr"></span>
+    <span class="corner bl"></span>
+    <span class="corner br"></span>
+  </div>
+
+  <main id="stage">
+
+    <!-- Game canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Camera feed, hidden source + styled preview -->
+    <video id="inputVideo" playsinline autoplay muted></video>
+    <div class="cam-panel">
+      <div class="cam-label"><span class="dot" id="camDot"></span>TRACKING_FEED</div>
+      <canvas id="camCanvas" width="160" height="120"></canvas>
+    </div>
+
+    <!-- HUD -->
+    <div class="hud">
+      <div class="hud-block hud-left">
+        <div class="hud-row"><span class="hud-tag">SCORE</span><span id="scoreVal">0000</span></div>
+        <div class="hud-row"><span class="hud-tag">BEST</span><span id="bestVal">0000</span></div>
+      </div>
+      <div class="hud-block hud-right">
+        <div class="hud-row"><span class="hud-tag">GESTURE</span><span id="gestureVal">—</span></div>
+        <div class="shield-meter">
+          <div class="shield-label">SHIELD</div>
+          <div class="shield-bar"><div id="shieldFill" class="shield-fill"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Start overlay -->
+    <section id="startScreen" class="overlay">
+      <p class="eyebrow">LOCAL COMPUTER VISION · NO DATA LEAVES YOUR DEVICE</p>
+      <h1>SIGNAL</h1>
+      <p class="sub">Your hand is the controller. Move it to steer. Make a <strong>fist</strong> to raise a shield.</p>
+      <ul class="howto">
+        <li><span class="idx">01</span> Grant camera access</li>
+        <li><span class="idx">02</span> Move your open hand to steer the node</li>
+        <li><span class="idx">03</span> Close your fist to shield through obstacles</li>
+      </ul>
+      <button id="startBtn" class="btn">ENABLE CAMERA &amp; START</button>
+      <p id="startError" class="error-text"></p>
+    </section>
+
+    <!-- Game over overlay -->
+    <section id="endScreen" class="overlay hidden">
+      <p class="eyebrow">RUN TERMINATED</p>
+      <h1 id="endScoreLabel">0000</h1>
+      <p class="sub" id="endMessage">Signal lost.</p>
+      <button id="retryBtn" class="btn">RETRY</button>
+    </section>
+
+    <!-- Loading overlay -->
+    <section id="loadingScreen" class="overlay hidden">
+      <p class="eyebrow">INITIALIZING</p>
+      <h1 class="loading-h1">CALIBRATING MODEL<span class="ellipsis"><span>.</span><span>.</span><span>.</span></span></h1>
+    </section>
+
+  </main>
+
+  <!-- MediaPipe Hands (runs fully on-device via WASM, no frames sent anywhere) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
+  <script src="handTracker.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
