@@ -80,7 +80,13 @@
   let camera = null;
   let hands = null;
 
-  async function start(videoEl, previewCanvasEl, onUpdate) {
+  async function start(videoEl, previewCanvasEl, onUpdate, options) {
+    const opts = Object.assign({
+      facingMode: 'user',
+      width: 480,
+      height: 360
+    }, options || {});
+
     hands = new Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
@@ -122,8 +128,9 @@
       onFrame: async () => {
         await hands.send({ image: videoEl });
       },
-      width: 480,
-      height: 360
+      facingMode: opts.facingMode,
+      width: opts.width,
+      height: opts.height
     });
 
     await camera.start();
