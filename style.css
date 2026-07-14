@@ -19,11 +19,16 @@ html, body {
   padding: 0;
   width: 100%;
   height: 100%;
+  height: calc(var(--vh, 1vh) * 100);
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-mono);
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
   -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 body {
@@ -37,7 +42,8 @@ body {
 #stage {
   position: relative;
   width: 100vw;
-  height: 100vh;
+  height: 100%;
+  height: calc(var(--vh, 1vh) * 100);
   overflow: hidden;
 }
 
@@ -159,6 +165,62 @@ body {
 }
 .shield-fill.ready { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
 
+/* ---------- Health / integrity pips ---------- */
+.health-meter { margin-top: 10px; }
+.health-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  letter-spacing: 0.1em;
+}
+.health-pips {
+  display: flex;
+  gap: 5px;
+}
+.health-pip {
+  width: 22px;
+  height: 10px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.health-pip.filled {
+  background: var(--teal);
+  box-shadow: 0 0 6px var(--teal);
+  border-color: var(--teal-dim);
+}
+.health-pip.hit {
+  background: var(--coral);
+  box-shadow: 0 0 10px var(--coral);
+  border-color: var(--coral);
+}
+
+/* ---------- Restart-by-gesture ---------- */
+.restart-hint {
+  margin-bottom: 20px;
+  width: 220px;
+}
+.restart-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.restart-label strong { color: var(--teal); }
+.restart-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--line);
+  overflow: hidden;
+}
+.restart-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--teal);
+  box-shadow: 0 0 8px var(--teal);
+  transition: width 0.08s linear;
+}
+
 /* ---------- Overlays ---------- */
 .overlay {
   position: absolute;
@@ -255,8 +317,55 @@ body {
 }
 
 @media (max-width: 640px) {
-  .hud { right: 30px; flex-direction: column; gap: 10px; }
-  .cam-panel { top: auto; bottom: 20px; right: 20px; transform: scale(0.8); transform-origin: bottom right; }
+  .scanframe { inset: 8px; }
+
+  .hud {
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    left: calc(16px + env(safe-area-inset-left, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    gap: 8px;
+  }
+  .hud-block { min-width: 0; padding: 8px 10px; }
+  .hud-row { font-size: 11px; gap: 10px; }
+  .hud-tag { font-size: 9px; }
+  .shield-bar, .health-pips { width: 100px; }
+  .health-pip { width: 16px; height: 8px; }
+
+  .cam-panel {
+    top: auto;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    right: calc(14px + env(safe-area-inset-right, 0px));
+    padding: 5px;
+  }
+  .cam-label { font-size: 8px; margin-bottom: 4px; }
+  #camCanvas { width: 96px; height: 72px; }
+
+  .overlay { padding: 20px 16px; }
+  .overlay h1 { font-size: clamp(36px, 14vw, 56px); margin-bottom: 12px; }
+  .eyebrow { font-size: 10px; letter-spacing: 0.14em; }
+  .sub { font-size: 13px; margin-bottom: 18px; }
+  .howto { font-size: 12px; gap: 8px; margin-bottom: 24px; }
+  .restart-hint { width: 100%; max-width: 260px; }
+
+  .btn {
+    padding: 16px 24px;
+    font-size: 13px;
+    min-height: 48px;
+    width: 100%;
+    max-width: 300px;
+  }
+}
+
+@media (max-width: 380px) {
+  .hud { flex-direction: column; align-items: flex-start; }
+  .hud-right { align-self: flex-start; }
+}
+
+@media (orientation: landscape) and (max-height: 420px) {
+  .overlay h1 { font-size: clamp(28px, 8vw, 44px); margin-bottom: 8px; }
+  .sub { margin-bottom: 12px; }
+  .howto { margin-bottom: 14px; gap: 5px; }
+  .cam-panel { transform: scale(0.7); transform-origin: bottom right; }
 }
 
 @media (prefers-reduced-motion: reduce) {
