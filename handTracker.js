@@ -5,8 +5,13 @@
  * browser (WASM) — the video frames never leave the device.
  *
  * Exposes `window.HandTracker`:
- *   - start(videoEl, previewCanvasEl, onUpdate): begins camera + model, calls
- *     onUpdate(state) on every processed frame.
+ *   - start(videoEl, previewCanvasEl, onUpdate, options): begins camera + model.
+ *     options: { facingMode, width, height } (all optional).
+ *     Calls onUpdate(state) on every processed frame.
+ *     The returned promise only resolves once the model has actually produced
+ *     its first result (i.e. detection is confirmed running) — it rejects if
+ *     that never happens within a few seconds, or if the camera/model fails
+ *     to start at all.
  *   - stop(): stops the camera.
  *
  * state passed to onUpdate:
@@ -79,8 +84,15 @@
 
   let camera = null;
   let hands = null;
+  let activeVideoEl = null;
 
   async function start(videoEl, previewCanvasEl, onUpdate, options) {
+    if (typeof Hands === 'undefined' || typeof Camera === 'undefined') {
+      throw new Error('The hand-tracking library failed to load (check your internet connection).');
+    }
+
+    activeVideoEl = videoEl;
+
     const opts = Object.assign({
       facingMode: 'user',
       width: 480,
@@ -100,7 +112,21 @@
 
     const previewCtx = previewCanvasEl.getContext('2d');
 
+    // Resolves the first time the model actually produces a result — proof
+    // that frames are flowing through the pipeline, whether or not a hand is
+    // in view yet. If this never happens, something upstream is broken
+    // (camera frozen, WASM failed to init, etc.) and start() should reject
+    // rather than leave the game silently waiting forever.
+    let gotFirstResult = false;
+    let resolveFirstResult;
+    const firstResultPromise = new Promise((resolve) => { resolveFirstResult = resolve; });
+
     hands.onResults((results) => {
+      if (!gotFirstResult) {
+        gotFirstResult = true;
+        resolveFirstResult();
+      }
+
       const w = previewCanvasEl.width;
       const h = previewCanvasEl.height;
 
@@ -126,7 +152,14 @@
 
     camera = new Camera(videoEl, {
       onFrame: async () => {
-        await hands.send({ image: videoEl });
+        try {
+          await hands.send({ image: videoEl });
+        } catch (err) {
+          // Swallow individual frame errors (e.g. a frame sent right as the
+          // model is still initializing) — the watchdog below catches the
+          // case where NO frame ever succeeds.
+          console.warn('Hand-tracking frame skipped:', err);
+        }
       },
       facingMode: opts.facingMode,
       width: opts.width,
@@ -134,6 +167,18 @@
     });
 
     await camera.start();
+
+    const WATCHDOG_MS = 6000;
+    const watchdogPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        if (!gotFirstResult) {
+          reject(new Error('Hand-tracking model is taking longer than expected to start.'));
+        }
+      }, WATCHDOG_MS);
+    });
+
+    // Don't call the game "started" until we know detection is actually running.
+    await Promise.race([firstResultPromise, watchdogPromise]);
   }
 
   function stop() {
@@ -141,6 +186,14 @@
       camera.stop();
       camera = null;
     }
+    if (activeVideoEl && activeVideoEl.srcObject) {
+      try {
+        activeVideoEl.srcObject.getTracks().forEach((track) => track.stop());
+      } catch (e) { /* ignore */ }
+      activeVideoEl.srcObject = null;
+    }
+    activeVideoEl = null;
+    hands = null;
   }
 
   window.HandTracker = { start, stop };
