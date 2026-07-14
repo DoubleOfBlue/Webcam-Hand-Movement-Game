@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>SIGNAL // Hand-Tracked Dodge</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,6 +35,10 @@
       <div class="hud-block hud-left">
         <div class="hud-row"><span class="hud-tag">SCORE</span><span id="scoreVal">0000</span></div>
         <div class="hud-row"><span class="hud-tag">BEST</span><span id="bestVal">0000</span></div>
+        <div class="health-meter">
+          <div class="health-label">INTEGRITY</div>
+          <div class="health-pips" id="healthPips"></div>
+        </div>
       </div>
       <div class="hud-block hud-right">
         <div class="hud-row"><span class="hud-tag">GESTURE</span><span id="gestureVal">—</span></div>
@@ -49,11 +53,12 @@
     <section id="startScreen" class="overlay">
       <p class="eyebrow">LOCAL COMPUTER VISION · NO DATA LEAVES YOUR DEVICE</p>
       <h1>SIGNAL</h1>
-      <p class="sub">Your hand is the controller. Move it to steer. Make a <strong>fist</strong> to raise a shield.</p>
+      <p class="sub">Your hand is the controller. Move it to steer. Make a <strong>fist</strong> to raise a shield. Getting hit costs a hit point, not the run — you heal back over time.</p>
       <ul class="howto">
         <li><span class="idx">01</span> Grant camera access</li>
         <li><span class="idx">02</span> Move your open hand to steer the node</li>
         <li><span class="idx">03</span> Close your fist to shield through obstacles</li>
+        <li><span class="idx">04</span> Survive without damage to regenerate integrity</li>
       </ul>
       <button id="startBtn" class="btn">ENABLE CAMERA &amp; START</button>
       <p id="startError" class="error-text"></p>
@@ -64,6 +69,12 @@
       <p class="eyebrow">RUN TERMINATED</p>
       <h1 id="endScoreLabel">0000</h1>
       <p class="sub" id="endMessage">Signal lost.</p>
+
+      <div class="restart-hint">
+        <div class="restart-label">HOLD <strong>OPEN PALM</strong> TO RESTART</div>
+        <div class="restart-bar"><div id="restartFill" class="restart-fill"></div></div>
+      </div>
+
       <button id="retryBtn" class="btn">RETRY</button>
     </section>
 
