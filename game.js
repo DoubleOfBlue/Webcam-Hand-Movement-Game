@@ -20,6 +20,11 @@
   const startScreen = document.getElementById('startScreen');
   const endScreen = document.getElementById('endScreen');
   const loadingScreen = document.getElementById('loadingScreen');
+  const loadingEyebrow = document.getElementById('loadingEyebrow');
+  const loadingTitle = document.getElementById('loadingTitle');
+  const loadingHint = document.getElementById('loadingHint');
+  const skipDetectBtn = document.getElementById('skipDetectBtn');
+  const camPanel = document.getElementById('camPanel');
   const startBtn = document.getElementById('startBtn');
   const retryBtn = document.getElementById('retryBtn');
   const startError = document.getElementById('startError');
@@ -117,6 +122,26 @@
     }
   }
 
+  // ---------- Waiting for an initial hand detection before play begins ----------
+  let awaitingHandDetection = false;
+  let handDetectHoldStart = 0;
+  const HAND_DETECT_HOLD_MS = 350; // brief sustained detection avoids starting on a flicker
+  let resolveHandDetected = null;
+
+  function updateHandDetectionWait() {
+    if (!awaitingHandDetection) return;
+    const now = performance.now();
+    if (hand.present) {
+      if (!handDetectHoldStart) handDetectHoldStart = now;
+      if (now - handDetectHoldStart >= HAND_DETECT_HOLD_MS) {
+        awaitingHandDetection = false;
+        if (resolveHandDetected) { resolveHandDetected(); resolveHandDetected = null; }
+      }
+    } else {
+      handDetectHoldStart = 0;
+    }
+  }
+
   function onHandUpdate(state) {
     hand.present = state.present;
     if (state.present) {
@@ -133,6 +158,8 @@
     else if (state.gesture === 'open') label = 'OPEN · STEER';
     else if (state.gesture === 'point') label = 'POINT';
     gestureVal.textContent = label;
+
+    updateHandDetectionWait();
 
     // The end-screen gesture-restart check runs off the same per-frame
     // callback so it keeps working even while the main game loop is stopped.
@@ -451,27 +478,91 @@
     requestAnimationFrame(loop);
   }
 
-  // ---------- Boot: camera + model ----------
+  function waitForHandDetected() {
+    return new Promise((resolve) => {
+      awaitingHandDetection = true;
+      handDetectHoldStart = 0;
+      resolveHandDetected = resolve;
+    });
+  }
+
+  skipDetectBtn.addEventListener('click', () => {
+    if (awaitingHandDetection) {
+      awaitingHandDetection = false;
+      if (resolveHandDetected) { resolveHandDetected(); resolveHandDetected = null; }
+    }
+  });
+
+  const HAND_DETECT_HINT_TEXT = loadingHint.textContent;
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function describeStartupError(err) {
+    const name = err && err.name;
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+      return 'Camera permission was denied — allow camera access in your browser, we\u2019ll keep checking.';
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+      return 'No camera was found — connect one and we\u2019ll keep checking.';
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError') {
+      return 'The camera seems to be in use by another app — close it and we\u2019ll keep checking.';
+    }
+    return (err && err.message) || 'Having trouble starting hand tracking — retrying automatically.';
+  }
+
+  // ---------- Boot: camera + model (retries indefinitely instead of giving up) ----------
+  let bootAttempt = 0;
+
   async function boot() {
     startBtn.disabled = true;
     startError.textContent = '';
+    skipDetectBtn.classList.add('hidden');
+    loadingHint.classList.add('hidden');
     loadingScreen.classList.remove('hidden');
-    try {
-      await window.HandTracker.start(videoEl, camCanvas, onHandUpdate, {
-        facingMode: 'user',
-        width: isMobile ? 320 : 480,
-        height: isMobile ? 240 : 360
-      });
-      loadingScreen.classList.add('hidden');
-      startScreen.classList.add('hidden');
-      startGame();
-    } catch (err) {
-      console.error(err);
-      loadingScreen.classList.add('hidden');
-      startBtn.disabled = false;
-      startError.textContent =
-        'Could not access the camera. Check permissions and that you are on https:// (or localhost), then try again.';
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      bootAttempt++;
+      loadingEyebrow.textContent = bootAttempt === 1 ? 'INITIALIZING' : `RETRYING · ATTEMPT ${bootAttempt}`;
+      loadingTitle.innerHTML = 'CALIBRATING MODEL<span class="ellipsis"><span>.</span><span>.</span><span>.</span></span>';
+
+      try {
+        await window.HandTracker.start(videoEl, camCanvas, onHandUpdate, {
+          facingMode: 'user',
+          width: isMobile ? 320 : 480,
+          height: isMobile ? 240 : 360
+        });
+        break; // success — fall through to phase 2 below
+      } catch (err) {
+        console.warn(`Hand-tracking start attempt ${bootAttempt} failed, retrying:`, err);
+        window.HandTracker.stop();
+        loadingHint.textContent = describeStartupError(err);
+        loadingHint.classList.remove('hidden');
+        await sleep(1500);
+        // loop continues — never dead-ends here
+      }
     }
+
+    // Phase 2: model is confirmed running — now wait for an actual hand.
+    camPanel.classList.remove('hidden');
+    loadingEyebrow.textContent = 'AWAITING SIGNAL';
+    loadingTitle.textContent = 'SHOW YOUR HAND';
+    loadingHint.textContent = HAND_DETECT_HINT_TEXT;
+    loadingHint.classList.remove('hidden');
+
+    const skipTimer = setTimeout(() => {
+      skipDetectBtn.classList.remove('hidden');
+    }, 6000);
+
+    await waitForHandDetected();
+    clearTimeout(skipTimer);
+
+    loadingScreen.classList.add('hidden');
+    startScreen.classList.add('hidden');
+    startGame();
   }
 
   startBtn.addEventListener('click', boot);
