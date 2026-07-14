@@ -14,6 +14,8 @@
 
 * { box-sizing: border-box; }
 
+.hidden { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -83,7 +85,7 @@ body {
   position: absolute;
   top: 30px;
   right: 30px;
-  z-index: 20;
+  z-index: 45;
   background: rgba(18, 22, 31, 0.85);
   border: 1px solid var(--line);
   padding: 8px;
