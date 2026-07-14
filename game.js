@@ -14,6 +14,8 @@
   const bestVal = document.getElementById('bestVal');
   const gestureVal = document.getElementById('gestureVal');
   const shieldFill = document.getElementById('shieldFill');
+  const healthPipsEl = document.getElementById('healthPips');
+  const restartFill = document.getElementById('restartFill');
 
   const startScreen = document.getElementById('startScreen');
   const endScreen = document.getElementById('endScreen');
@@ -24,12 +26,26 @@
   const endScoreLabel = document.getElementById('endScoreLabel');
   const endMessage = document.getElementById('endMessage');
 
+  // ---------- Mobile viewport height fix ----------
+  // Mobile browsers resize their chrome (address bar) which throws off 100vh.
+  // We track real viewport height in a CSS var instead.
+  function setViewportUnit() {
+    document.documentElement.style.setProperty('--vh', window.innerHeight * 0.01 + 'px');
+  }
+  setViewportUnit();
+  window.addEventListener('resize', setViewportUnit);
+  window.addEventListener('orientationchange', setViewportUnit);
+
+  const isMobile = matchMedia('(pointer: coarse)').matches || window.innerWidth < 700;
+
   let W = 0, H = 0;
   function resize() {
+    setViewportUnit();
     W = canvas.width = window.innerWidth;
     H = canvas.height = window.innerHeight;
   }
   window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 200));
   resize();
 
   // ---------- Persistent best score ----------
@@ -48,6 +64,59 @@
   const SHIELD_DRAIN_PER_SEC = 45;
   const SHIELD_REGEN_PER_SEC = 18;
 
+  // ---------- Health / healing ----------
+  const HEALTH_MAX = 3;
+  let health = HEALTH_MAX;
+  let invulnTimer = 0;
+  const INVULN_DURATION = 1.2; // seconds of i-frames after taking a hit
+  let timeSinceLastHit = 0;
+  const REGEN_INTERVAL = 9; // seconds of clean survival to regenerate one point
+
+  function renderHealthPips() {
+    healthPipsEl.innerHTML = '';
+    for (let i = 0; i < HEALTH_MAX; i++) {
+      const pip = document.createElement('div');
+      pip.className = 'health-pip' + (i < health ? ' filled' : '');
+      healthPipsEl.appendChild(pip);
+    }
+  }
+
+  function flashHealthHit() {
+    const pips = healthPipsEl.querySelectorAll('.health-pip');
+    const idx = health; // the pip that just emptied
+    if (pips[idx]) {
+      pips[idx].classList.add('hit');
+      setTimeout(() => pips[idx] && pips[idx].classList.remove('hit'), 300);
+    }
+  }
+
+  // ---------- Gesture-controlled restart (no mouse needed after game over) ----------
+  const RESTART_HOLD_MS = 1100;
+  let restartHoldStart = 0;
+  let restartTriggered = false;
+
+  function updateRestartGesture() {
+    if (endScreen.classList.contains('hidden')) {
+      restartHoldStart = 0;
+      if (restartFill) restartFill.style.width = '0%';
+      return;
+    }
+    const now = performance.now();
+    if (hand.present && hand.gesture === 'open') {
+      if (!restartHoldStart) restartHoldStart = now;
+      const progress = Math.min((now - restartHoldStart) / RESTART_HOLD_MS, 1);
+      if (restartFill) restartFill.style.width = (progress * 100) + '%';
+      if (progress >= 1 && !restartTriggered) {
+        restartTriggered = true;
+        endScreen.classList.add('hidden');
+        startGame();
+      }
+    } else {
+      restartHoldStart = 0;
+      if (restartFill) restartFill.style.width = '0%';
+    }
+  }
+
   function onHandUpdate(state) {
     hand.present = state.present;
     if (state.present) {
@@ -64,6 +133,10 @@
     else if (state.gesture === 'open') label = 'OPEN · STEER';
     else if (state.gesture === 'point') label = 'POINT';
     gestureVal.textContent = label;
+
+    // The end-screen gesture-restart check runs off the same per-frame
+    // callback so it keeps working even while the main game loop is stopped.
+    updateRestartGesture();
   }
 
   // ---------- Game state ----------
@@ -83,17 +156,23 @@
     spawnTimer = 0;
     shieldEnergy = SHIELD_MAX;
     shieldActive = false;
+    health = HEALTH_MAX;
+    invulnTimer = 0;
+    timeSinceLastHit = 0;
+    restartTriggered = false;
     avatar.x = W / 2;
     avatar.y = H / 2;
+    renderHealthPips();
   }
 
+  // Slower, gentler difficulty ramp: takes well over a minute to approach
+  // its ceiling instead of spiking in the first few seconds.
   function difficultySpeed() {
-    // Base speed ramps up gradually with survival time, capped.
-    return Math.min(260 + elapsed * 9, 720);
+    return Math.min(190 + elapsed * 3.2, 480);
   }
 
   function difficultySpawnInterval() {
-    return Math.max(0.85 - elapsed * 0.012, 0.22);
+    return Math.max(1.3 - elapsed * 0.0055, 0.5);
   }
 
   function spawnObstacle() {
@@ -187,6 +266,32 @@
     shieldFill.classList.toggle('ready', !shieldActive && shieldEnergy > SHIELD_MAX * 0.6);
   }
 
+  function updateHealth(dt) {
+    if (invulnTimer > 0) invulnTimer = Math.max(0, invulnTimer - dt);
+
+    if (health < HEALTH_MAX) {
+      timeSinceLastHit += dt;
+      if (timeSinceLastHit >= REGEN_INTERVAL) {
+        timeSinceLastHit = 0;
+        health = Math.min(HEALTH_MAX, health + 1);
+        renderHealthPips();
+      }
+    }
+  }
+
+  function takeDamage(x, y) {
+    if (invulnTimer > 0) return; // still recovering from the last hit
+    health -= 1;
+    invulnTimer = INVULN_DURATION;
+    timeSinceLastHit = 0;
+    spawnBurst(x, y, '#ff6b4a');
+    flashHealthHit();
+    renderHealthPips();
+    if (health <= 0) {
+      endGame('Integrity depleted.');
+    }
+  }
+
   function checkCollisions() {
     for (let i = obstacles.length - 1; i >= 0; i--) {
       const o = obstacles[i];
@@ -196,9 +301,13 @@
           spawnBurst(o.x, o.y, '#ffb454');
           obstacles.splice(i, 1);
           score += 5;
+        } else if (invulnTimer > 0) {
+          // Already recovering — clear the obstacle without a second penalty.
+          obstacles.splice(i, 1);
         } else {
-          endGame('An obstacle got through your guard.');
-          return;
+          obstacles.splice(i, 1);
+          takeDamage(o.x, o.y);
+          if (!running) return;
         }
       }
     }
@@ -221,7 +330,13 @@
   }
 
   function drawAvatar() {
-    const color = shieldActive ? '#ffb454' : '#5eead4';
+    let color = shieldActive ? '#ffb454' : '#5eead4';
+    // Blink while invulnerable so a hit reads as a hit, not a freebie.
+    if (invulnTimer > 0 && !shieldActive) {
+      const blink = Math.floor(invulnTimer * 10) % 2 === 0;
+      if (blink) color = '#ff6b4a';
+    }
+
     ctx.save();
     ctx.shadowBlur = shieldActive ? 30 : 18;
     ctx.shadowColor = color;
@@ -269,6 +384,7 @@
 
     updateAvatarTarget();
     updateShield(dt);
+    updateHealth(dt);
 
     spawnTimer -= dt;
     if (spawnTimer <= 0) {
@@ -284,6 +400,7 @@
 
     updateParticles(dt);
     checkCollisions();
+    if (!running) return;
     pruneOffscreen();
 
     scoreVal.textContent = String(Math.floor(score)).padStart(4, '0');
@@ -304,6 +421,7 @@
     lastTime = ts;
 
     update(dt);
+    if (!running) return;
     render();
 
     requestAnimationFrame(loop);
@@ -319,6 +437,9 @@
     }
     endScoreLabel.textContent = String(finalScore).padStart(4, '0');
     endMessage.textContent = message;
+    restartTriggered = false;
+    restartHoldStart = 0;
+    if (restartFill) restartFill.style.width = '0%';
     endScreen.classList.remove('hidden');
   }
 
@@ -331,15 +452,16 @@
   }
 
   // ---------- Boot: camera + model ----------
-  let trackerStarted = false;
-
   async function boot() {
     startBtn.disabled = true;
     startError.textContent = '';
     loadingScreen.classList.remove('hidden');
     try {
-      await window.HandTracker.start(videoEl, camCanvas, onHandUpdate);
-      trackerStarted = true;
+      await window.HandTracker.start(videoEl, camCanvas, onHandUpdate, {
+        facingMode: 'user',
+        width: isMobile ? 320 : 480,
+        height: isMobile ? 240 : 360
+      });
       loadingScreen.classList.add('hidden');
       startScreen.classList.add('hidden');
       startGame();
@@ -358,5 +480,6 @@
     startGame();
   });
 
+  renderHealthPips();
   loadingScreen.classList.add('hidden'); // only show while actively booting
 })();
